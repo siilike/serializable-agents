@@ -1,0 +1,143 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+repositories {
+	mavenCentral()
+}
+
+sourceSets {
+	main {
+		java {
+			srcDir "${projectDir}/src"
+		}
+	}
+
+	test {
+		java {
+			srcDir "${projectDir}/tests"
+		}
+	}
+}
+
+dependencies {
+	compile 'org.javassist:javassist:+'
+
+	testCompile 'org.apache.commons:commons-collections4:4.0'
+	testCompile 'commons-collections:commons-collections:3.2.1'
+	testCompile 'org.codehaus.groovy:groovy:2.3.9'
+	testCompile 'org.springframework:spring-core:4.1.4.RELEASE'
+	testCompile 'org.springframework:spring-beans:4.1.4.RELEASE'
+}
+
+jar.baseName = 'serialize'
+version = 0.1
+
+[
+	"MethodExceptionTransformer": "java.lang.ProcessBuilder=start",
+	"MethodNullerTransformer": "org.apache.commons.collections4.functors.InvokerTransformer=transform,org.apache.commons.collections.functors.InvokerTransformer=transform",
+	"ObjectInputStreamTransformer": 'serialize.ObjectInputStreamTest$Inaccessible',
+	"SerializableTransformer": 'serialize.SerializableTest$Test1,serialize.SerializableTest$Test2,serialize.SerializableTest$Test3,serialize.SerializableTest$Test4'
+].each { transformer, testArgs ->
+	project.task("jar${transformer}", type: Jar) {  
+		archiveName = "${project.name}-${transformer}-${project.version}.jar"
+
+		from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }}
+
+		from (sourceSets.main.output) {
+			include "org/ketsu/serialize/transform/${transformer}.class"
+		}  
+
+		manifest {
+			attributes(
+				'Premain-Class': "org.ketsu.serialize.transform.${transformer}",
+				'Agent-Class': "org.ketsu.serialize.transform.${transformer}",
+				'Can-Redefine-Classes': 'true',
+				'Can-Retransform-Classes': 'true',
+				'Can-Set-Native-Method-Prefix': 'true'
+			)
+		}
+	}
+
+	project.task("test${transformer}", type: Exec) {
+		commandLine 'java'
+
+		workingDir "${buildDir}"
+
+		args = [
+			"-javaagent:libs/${project.name}-${transformer}-${project.version}.jar=" + testArgs,
+			"-cp", sourceSets.test.runtimeClasspath.asPath,
+			"-ea",
+			"serialize." + transformer.replace('Transformer', 'Test')
+		]
+	}
+
+	jar.dependsOn "jar${transformer}"
+	test.dependsOn "test${transformer}"
+}
+
+jar {
+	from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }}
+
+	manifest {
+		attributes(
+			'Premain-Class': "org.ketsu.serialize.Agent",
+			'Agent-Class': "org.ketsu.serialize.Agent",
+			'Can-Redefine-Classes': 'true',
+			'Can-Retransform-Classes': 'true',
+			'Can-Set-Native-Method-Prefix': 'true'
+		)
+	}
+}
+
+task testYso() {}
+
+test.dependsOn testYso
+
+[ "Groovy1", "CommonsCollections1", "CommonsCollections2", "Spring1" ].each { which ->
+
+	project.task("generate${which}Payload", type: Exec) {
+		commandLine 'java'
+
+		workingDir "${buildDir}"
+
+		args = [
+			"-jar", "ysoserial.jar",
+			which,
+			"touch ${buildDir}/${which}.success"
+		]
+
+		standardOutput = new FileOutputStream("${buildDir}/${which}.payload")
+	}
+
+	[
+		"MethodExceptionTransformer": "java.lang.ProcessBuilder=start",
+// 		"ObjectInputStreamTransformer": '',
+		"ObjectInputStreamTransformer": 'org.codehaus.groovy.runtime.ConvertedClosure,com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl,org.apache.commons.collections4.functors.InvokerTransformer,org.apache.commons.collections.functors.InvokerTransformer',
+// 		"ObjectInputStreamTransformer": 'sun.reflect.annotation.AnnotationInvocationHandler',
+// 		"SerializableTransformer": 'com.sun.org.apache.xalan.internal.xsltc.trax.TemplatesImpl'
+	].each { transformer, testArgs ->
+
+		project.task("test${which}${transformer}", type: Exec) {
+			dependsOn "generate${which}Payload"
+
+			doFirst {
+				file("${buildDir}/${which}.success").delete();
+			}
+
+			commandLine 'java'
+
+			workingDir "${buildDir}"
+
+			args = [
+				"-javaagent:libs/${project.name}-${transformer}-${project.version}.jar=" + testArgs,
+				"-cp", sourceSets.test.runtimeClasspath.asPath,
+				"-ea",
+				"serialize.Deserializer"
+			]
+
+			standardInput = new FileInputStream("${buildDir}/${which}.payload")
+		}
+
+		testYso.dependsOn "test${which}${transformer}"
+	}
+}
