@@ -8,6 +8,8 @@ import java.security.ProtectionDomain;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.ketsu.serialize.Config;
+
 import javassist.ClassPool;
 import javassist.CtClass;
 
@@ -19,16 +21,10 @@ public class SerializableTransformer implements ClassFileTransformer
 	{
 		if(args == null || args.isEmpty())
 		{
-			nonSerializables.add("org/apache/commons/collections4/functors/InvokerTransformer");
-			nonSerializables.add("org/apache/commons/collections/functors/InvokerTransformer");
-
-			nonSerializables.add("org/apache/commons/collections4/functors/InstantiateFactory");
-			nonSerializables.add("org/apache/commons/collections/functors/InstantiateFactory");
-
-			nonSerializables.add("org/apache/commons/collections4/functors/InstantiateTransformer");
-			nonSerializables.add("org/apache/commons/collections/functors/InstantiateTransformer");
-
-			nonSerializables.add("com/sun/org/apache/xalan/internal/xsltc/trax/TemplatesImpl");
+			for(String c : Config.getUnsafeClasses())
+			{
+				nonSerializables.add(c.replace('.', '/'));
+			}
 		}
 		else
 		{

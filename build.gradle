@@ -43,10 +43,6 @@ version = 0.1
 
 		from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }}
 
-		from (sourceSets.main.output) {
-			include "org/ketsu/serialize/transform/${transformer}.class"
-		}  
-
 		manifest {
 			attributes(
 				'Premain-Class': "org.ketsu.serialize.transform.${transformer}",
@@ -73,20 +69,6 @@ version = 0.1
 
 	jar.dependsOn "jar${transformer}"
 	test.dependsOn "test${transformer}"
-}
-
-jar {
-	from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }}
-
-	manifest {
-		attributes(
-			'Premain-Class': "org.ketsu.serialize.Agent",
-			'Agent-Class': "org.ketsu.serialize.Agent",
-			'Can-Redefine-Classes': 'true',
-			'Can-Retransform-Classes': 'true',
-			'Can-Set-Native-Method-Prefix': 'true'
-		)
-	}
 }
 
 task testYso() {}
